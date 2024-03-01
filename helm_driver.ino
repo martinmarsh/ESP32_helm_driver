@@ -42,6 +42,7 @@ float g_pd = 100;
 
 bool g_start = true;
 bool g_auto_on = false;
+bool g_active = false;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
 Motor motor(MOTOR_IN1, MOTOR_IN2, MOTOR_PWM, PWM_FREQ, PWM_CHANNEL, PWM_RESOLUTION, 80, 20);
@@ -50,6 +51,7 @@ int update_counter = 0;
 int slow_update_counter = 0;
 int loop_phase = 0;      //Ensures only one routine runs per loop
 
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   motor.setup();
@@ -57,7 +59,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting");
 
-  rudderAngle.setBase(1, 0);
+  rudderAngle.setBase(1, 0);    // As sensor is on rudder stock only 1 turn is possible typically +/- 40
 
   digitalWrite(LED_BUILTIN, HIGH);
 
@@ -86,13 +88,10 @@ void loop() {
   start_time = millis();
    switch(loop_phase){
     case 0:
-        fast_update();
+        update_1();
       break;
     case 1:
-        if (++update_counter > 4){
-          update();
-          update_counter = 0;
-        }
+        update_2();
       break;
     case 2:
       if (++slow_update_counter > 16){
@@ -108,9 +107,80 @@ void loop() {
 }
 
 
-void update() {
+void update_2() {
+  if (udpComms.messageAvailable()){
+    char* mess = udpComms.receivedMessage;
+    bool ok = true;
+    bool check_ok = false;
+    bool active = false;
+    int im = 1;
+    int is = 0;
+    int field = 0;
+    char s[64];
+    float helm_pos = 0;
+    int check_sum = 0;
+    // $PXXS2,helm_pos(float), P or S, 1 or 0*checksum
+    if (mess[0] != '$'){
+      ok = false;
+    }
+    while (mess[im] != '\0' && ok) {
+      if (mess[im] == '*') {
+        char cs[3];
+        mess[im] = ',';  //ensure last value is pocessed
+        sprintf(&cs[0], "%02X", check_sum);
+        if (cs[0] == mess[im+1] && cs[1] == mess[im+2]){
+          check_ok = true;
+        }
+      }
+      check_sum ^= (int)(mess[im]);
+      if (mess[im] != ',') {
+        s[is] = mess[im]; 
+      } else {
+        s[is] += '\0';
+        switch (field){
+          case 0:
+            if (strcmp(s, "PXXS2") != 0){
+              ok = false;
+            }
+            break;
+          case 1:
+            helm_pos = atof(s);
+            break;
+          case 2:
+            if (s[0] == 'P'){
+              if (helm_pos > 0){
+                helm_pos *= -1;
+              }
 
-   
+            }
+          case 3:
+            if (s[0] == '1'){
+              active = true;
+            } 
+
+            if (check_ok){
+              if (active){
+                g_active = true;
+                motor.moveto(helm_pos);
+              } else {
+                g_active = false;
+                motor.break_stop();
+                rudderAngle.setBase(1,0);
+              }
+
+            }
+            ok = false;
+            break;
+
+        } 
+        ++field;
+        is = -1;
+      }
+      im++;
+      is++;
+    }
+    udpComms.nextMessage(); 
+  } 
 }
 
 void slow_update() {
@@ -119,11 +189,9 @@ void slow_update() {
 }
 
 
-void fast_update() {
+void update_1() {
   rudderAngle.read();
   motor.position(rudderAngle.getRotation());
-
-  
 }
 
 void addCheckSum(char* buf){

@@ -59,6 +59,7 @@ void Motor::break_stop(){
 }
 
 void Motor::power(int duty){
+  //duty is  0 to 100
   if (duty >= this->min_duty && duty <= this->max_duty) {
     if (!this->pwm_active) { 
         ledcAttachPin(this->pwm, this->pwm_channel);
@@ -84,10 +85,35 @@ void Motor::power(int duty){
 
 
 void Motor::moveto(float position){
+  // this is +/- 180 based on compass error
+  this->desired_position = position;
+  this->run();
 
 }
 
 void Motor::position(float position){
+  // convert to relative 0 ie +/- 180
+  if (position < 180.0){
+    this->last_position = position;
+  } else {
+    this->last_position = position - 360.0;
+  }
+  this->run();
+}
+
+void Motor::run(){
+  float distance = this->desired_position - this->last_position;
+  int power = 100;
+  float abs_distance = abs(distance);
+
+  if (abs_distance < 3){
+    power = abs_distance/3 * 100;
+  }
+  if (distance < 0){
+    this->forward(power);
+  } else {
+    this->reverse(power);
+  }
 
 
 }

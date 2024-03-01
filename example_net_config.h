@@ -15,5 +15,5 @@
 #define PASSWORD_B  "*********"
 
 
-#define BROADCAST_PORT 8005
-#define LISTEN_PORT  8006
+#define BROADCAST_PORT 8007
+#define LISTEN_PORT  8008

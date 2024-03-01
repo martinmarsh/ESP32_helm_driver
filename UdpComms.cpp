@@ -7,7 +7,8 @@
 //globals are required to access be in scope within Async call back
 uint8_t g_recBuf[61];
 int g_recLen;
-bool g_recLocked;           
+bool g_recLocked;
+         
 
 UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int broadcastPort, int listenPort, int retry_attempts) {
     WiFi.mode(WIFI_STA);

@@ -18,6 +18,7 @@ class Motor {
 
     
     private:
+    void run();
     int dutyCycle;
     int max_duty;
     int min_duty;
@@ -29,7 +30,8 @@ class Motor {
     int pwm_channel;
     int pwm_resolution;
     int max_pwm;
-
+    float desired_position;
+    float last_position;
 };
 
 
