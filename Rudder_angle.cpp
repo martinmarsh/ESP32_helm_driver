@@ -102,28 +102,32 @@ void RudderAngle::readRaw_() {
 #ifdef AS5600  
   int low_byte;    //raw angle bits[7:0]
   word high_byte;  //raw angle bits[11:8]
-
+  
+  if (this->AS5600Setup_ ){
   //----- read low-order bits 7:0
-  Wire.beginTransmission(AS5600);  //connect to the sensor
-  Wire.write(0x0D);                //figure 21 - register map: Raw angle (7:0)
-  Wire.endTransmission();          //end transmission
-  Wire.requestFrom(AS5600, 1);     //request from the sensor
-  while (Wire.available() == 0)
-    ;                      //wait until it becomes available
-  low_byte = Wire.read();  //Reading the data after the request
+    Wire.beginTransmission(AS5600);  //connect to the sensor
+    Wire.write(0x0D);                //figure 21 - register map: Raw angle (7:0)
+    Wire.endTransmission();          //end transmission
+    Wire.requestFrom(AS5600, 1);     //request from the sensor
+    while (Wire.available() == 0)
+      ;                      //wait until it becomes available
+    low_byte = Wire.read();  //Reading the data after the request
 
-  // ----- read high-order bits 11:8
-  Wire.beginTransmission(AS5600);
-  Wire.write(0x0C);  //figure 21 - register map: Raw angle (11:8)
-  Wire.endTransmission();
-  Wire.requestFrom(AS5600, 1);
-  while (Wire.available() == 0)
-    ;
-  high_byte = Wire.read();
+    // ----- read high-order bits 11:8
+    Wire.beginTransmission(AS5600);
+    Wire.write(0x0C);  //figure 21 - register map: Raw angle (11:8)
+    Wire.endTransmission();
+    Wire.requestFrom(AS5600, 1);
+    while (Wire.available() == 0)
+      ;
+    high_byte = Wire.read();
 
-  // ----- combine bytes
-  high_byte = high_byte << 8;          // shift highbyte to left
-  this->angle_ = high_byte | low_byte;  // combine bytes to get 12-bit value 11:0
+    // ----- combine bytes
+    high_byte = high_byte << 8;          // shift highbyte to left
+    this->angle_ = high_byte | low_byte;  // combine bytes to get 12-bit value 11:0
+  } else {
+    this->angle_ = 0;
+  }
 #endif
 }
 

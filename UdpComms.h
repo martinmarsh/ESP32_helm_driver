@@ -5,6 +5,7 @@
 #include "AsyncUDP.h"
 
 enum wifi_states {
+  WIFI_START_STATE,
   WIFI_CONNECTING_STATE,
   WIFI_JUST_CONNECTED_STATE,
   WIFI_CONNECTED_STATE,

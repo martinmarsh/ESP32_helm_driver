@@ -59,7 +59,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting");
 
-  rudderAngle.setBase(1, 0);    // As sensor is on rudder stock only 1 turn is possible typically +/- 40
+  //rudderAngle.setBase(1, 0);    // As sensor is on rudder stock only 1 turn is possible typically +/- 40
 
   digitalWrite(LED_BUILTIN, HIGH);
 
@@ -79,12 +79,14 @@ void loop() {
   unsigned long end_time;
  
   unsigned long exec_time =  LOOP_DELAY - end_time - start_time;
+  digitalWrite(LED_BUILTIN, LOW);
   if (exec_time < 0){
      Serial.printf("Shorter than 0 delay required: %i setting to 0\n", exec_time);
      exec_time = 0;   // copes with extra long functions or overflow on roll over;
   }
-  
   delay(exec_time);
+  digitalWrite(LED_BUILTIN, HIGH);
+
   start_time = millis();
    switch(loop_phase){
     case 0:
@@ -108,28 +110,47 @@ void loop() {
 
 
 void update_2() {
+  char* mess;
+  bool ok = true;
+  bool check_ok = false;
+  bool active = false;
+  int im;
+  int is;
+  int field;
+  char s[64];
+  float helm_pos = 0;
+  float heading = 0;
+  float desired_heading = 0;
+  char compass_status[6];
+  int check_sum = 0;
+  float gain;
+  float pi;
+  float pd;
+
   if (udpComms.messageAvailable()){
-    char* mess = udpComms.receivedMessage;
-    bool ok = true;
-    bool check_ok = false;
-    bool active = false;
-    int im = 1;
-    int is = 0;
-    int field = 0;
-    char s[64];
-    float helm_pos = 0;
-    int check_sum = 0;
-    // $PXXS2,helm_pos(float), P or S, 1 or 0*checksum
+    mess = udpComms.receivedMessage;
+    ok = true;
+    active = false;
+    check_ok = false;
+    im = 1;
+    is = 0;
+    field = 0;
+    // $PXXS1,auto,hdm,'M',set_hdm,'M',compass_status,pitch,roll,compass_temp,auto_gain,auto_pi,auto_pd*checksum
+    Serial.printf("Processing message = %s\n", mess);
+
     if (mess[0] != '$'){
       ok = false;
     }
+    check_sum = 0;
     while (mess[im] != '\0' && ok) {
       if (mess[im] == '*') {
-        char cs[3];
-        mess[im] = ',';  //ensure last value is pocessed
-        sprintf(&cs[0], "%02X", check_sum);
+        char cs[4];
+        mess[im] = ',';  //ensure last value is processed
+        sprintf(&cs[0], "%02X\0", check_sum);
         if (cs[0] == mess[im+1] && cs[1] == mess[im+2]){
           check_ok = true;
+        } else {
+          Serial.printf("invalid checksum expected = %s got %c%c\n", cs,mess[im+1], mess[im+2]);
         }
       }
       check_sum ^= (int)(mess[im]);
@@ -139,35 +160,65 @@ void update_2() {
         s[is] += '\0';
         switch (field){
           case 0:
-            if (strcmp(s, "PXXS2") != 0){
+            if (strcmp(s, "PXXS1") != 0){
               ok = false;
             }
             break;
           case 1:
-            helm_pos = atof(s);
-            break;
-          case 2:
-            if (s[0] == 'P'){
-              if (helm_pos > 0){
-                helm_pos *= -1;
-              }
-
-            }
-          case 3:
             if (s[0] == '1'){
               active = true;
             } 
-
+            break;
+          case 2:
+            heading = atof(s);
+            break;
+          case 3:
+            //M
+            break;
+          case 4:
+            desired_heading = atof(s);
+            break;
+          case 5:
+            //M
+            break;
+          case 6:
+            strcpy(compass_status, s);
+            break;
+          case 7:
+            //pitch
+            break;
+          case 8:
+            //roll
+            break;
+          case 9:
+            // temp
+            break;
+          case 10:
+            gain = atof(s);
+            break;
+          case 11:
+            pi = atof(s);
+            break;
+          case 12:
+            pd = atof(s);
+         
+            // as we are at the last value process sentence if check_ok
             if (check_ok){
               if (active){
                 g_active = true;
+                Serial.printf("got active compass = %.2f, deired: %.2f\n",heading, desired_heading);
+                float error = relative180(heading - desired_heading);
+                helm_pos = error * gain/33.0;
                 motor.moveto(helm_pos);
               } else {
                 g_active = false;
+                Serial.printf("got inactive compass = %.2f, deired: %.2f\n",heading, desired_heading);
                 motor.break_stop();
                 rudderAngle.setBase(1,0);
               }
 
+            } else {
+              Serial.printf("invalid checksum fields = %d\n", field);
             }
             ok = false;
             break;
@@ -203,4 +254,16 @@ void addCheckSum(char* buf){
 	}
   sprintf(&buf[i], "*%02X\n", check_sum);
 }
+
+// relative180(heading - desired_heading) gives error in degrees
+float relative180(float dif) {
+  if (dif < -180.0) {
+    dif += 360.0;
+  }
+  if (dif > 180.0) {
+    dif -= 360.0;
+  }
+  return dif;
+}
+
 

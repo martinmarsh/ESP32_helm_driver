@@ -5,14 +5,12 @@
 
 
 //globals are required to access be in scope within Async call back
-uint8_t g_recBuf[61];
+uint8_t g_recBuf[92];
 int g_recLen;
 bool g_recLocked;
-         
+
 
 UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int broadcastPort, int listenPort, int retry_attempts) {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
     this->max_retry_attempts_ = retry_attempts;
     this->number_of_wifi_retries = retry_attempts;
     this->wifi_status = WIFI_CONNECTING_STATE;
@@ -30,11 +28,15 @@ UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int
 }
 
 bool UdpComms::messageAvailable(){
-  if (g_recLocked == true && this->messageReady_ == false){
+  //Serial.printf("message available is %u: len %u byte %s\n",g_recLocked, g_recLen, g_recBuf);
+  if (g_recLocked){
       this->receivedMessage = (char *) g_recBuf;
       this->messageReady_ = true;
       Serial.printf("Set message available:  %u byte buffer: %s message: %s\n", g_recLen, g_recBuf, this->receivedMessage);
-  } 
+  } else {
+    //Serial.printf("message unavailable is %u\n",g_recLocked);
+    this->messageReady_ = false;
+  }
   return this->messageReady_;
 }
 
@@ -102,6 +104,13 @@ String UdpComms::connectStatusStr(){
 void UdpComms::stateMachine(){
   
   switch (this->wifi_status) {
+    case WIFI_START_STATE:
+      Serial.println("Starting WiFi");
+      WiFi.mode(WIFI_STA);
+      Serial.println("WiFi mode set");
+      this->wifi_status = WIFI_CONNECTING_STATE;
+      delay(2000);
+      break;
     case WIFI_CONNECTING_STATE:
       this->connectWiFi_();
       break;
@@ -123,14 +132,15 @@ void UdpComms::stateMachine(){
         if ( !g_recLocked){ 
           //only supports one packet length message
           g_recLocked = true;
-          size_t g_recLen = packet.read(g_recBuf, 60);
-          if (g_recLen > 0 && g_recLen <= 61) {
+          size_t g_recLen = packet.read(g_recBuf, 90);
+          if (g_recLen > 0 && g_recLen <= 91) {
               g_recBuf[g_recLen] = 0;
               Serial.printf("Got message in call back:  %u byte %s\n", g_recLen, g_recBuf);
               packet.printf("Got %u bytes\n", g_recLen);
           } else{
             // discard packet
-            g_recLocked = true;
+            g_recLocked = false;
+            Serial.printf("discarding packet:  %u byte %s\n", g_recLen, g_recBuf);
           }
         }
       });
