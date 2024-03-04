@@ -106,8 +106,8 @@ void Motor::run(){
   int power = 100;
   float abs_distance = abs(distance);
 
-  if (abs_distance < 3){
-    power = abs_distance/3 * 100;
+  if (abs_distance <= 5){
+    power = abs_distance/5 * 100;
   }
   if (distance < 0){
     this->forward(power);

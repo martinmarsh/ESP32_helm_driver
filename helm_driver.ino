@@ -39,10 +39,12 @@ RudderAngle rudderAngle;
 float g_gain = 100;
 float g_pi = 100;
 float g_pd = 100;
+float g_last_heading = -1;
+float p_integral = 0;
 
 bool g_start = true;
 bool g_auto_on = false;
-bool g_active = false;
+
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
 Motor motor(MOTOR_IN1, MOTOR_IN2, MOTOR_PWM, PWM_FREQ, PWM_CHANNEL, PWM_RESOLUTION, 80, 20);
@@ -79,13 +81,13 @@ void loop() {
   unsigned long end_time;
  
   unsigned long exec_time =  LOOP_DELAY - end_time - start_time;
-  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
   if (exec_time < 0){
      Serial.printf("Shorter than 0 delay required: %i setting to 0\n", exec_time);
      exec_time = 0;   // copes with extra long functions or overflow on roll over;
   }
   delay(exec_time);
-  digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(LED_BUILTIN, LOW);
 
   start_time = millis();
    switch(loop_phase){
@@ -126,6 +128,8 @@ void update_2() {
   float gain;
   float pi;
   float pd;
+  float error;
+  float change;
 
   if (udpComms.messageAvailable()){
     mess = udpComms.receivedMessage;
@@ -205,13 +209,35 @@ void update_2() {
             // as we are at the last value process sentence if check_ok
             if (check_ok){
               if (active){
-                g_active = true;
-                Serial.printf("got active compass = %.2f, deired: %.2f\n",heading, desired_heading);
-                float error = relative180(heading - desired_heading);
-                helm_pos = error * gain/33.0;
+                g_auto_on = true;
+                g_gain = gain;
+                g_pi = pi;
+                g_pd = pd;
+                change = 0;
+                error = relative180(desired_heading - heading);
+                if (g_last_heading >= 0) {
+                  change = relative180(g_last_heading - heading);
+                }
+                p_integral += error * pi/3000.0;
+                if (p_integral > 10){
+                  p_integral = 10;
+                } else if (p_integral < -10){
+                  p_integral = -10;
+                }
+                g_last_heading = heading;
+                helm_pos = (error + change * pd/100 + p_integral) * gain/50.0;
+                if (helm_pos > 20){
+                  helm_pos = 20;
+                } else if (helm_pos < -20){
+                  helm_pos = -20;
+                }
+
+                Serial.printf("active helm head %.1f, desired: %.1f helm_pos %.2f error %.2f integral %.3f change %.1f\n",heading, desired_heading, helm_pos, error, p_integral, change);
                 motor.moveto(helm_pos);
               } else {
-                g_active = false;
+                g_last_heading = -1;
+                p_integral = 0;
+                g_auto_on = false;
                 Serial.printf("got inactive compass = %.2f, deired: %.2f\n",heading, desired_heading);
                 motor.break_stop();
                 rudderAngle.setBase(1,0);
@@ -226,6 +252,9 @@ void update_2() {
         } 
         ++field;
         is = -1;
+      }
+      if (im > 82 or is > 60){
+        ok = false;   // abort if message parts are too large
       }
       im++;
       is++;
@@ -242,7 +271,9 @@ void slow_update() {
 
 void update_1() {
   rudderAngle.read();
-  motor.position(rudderAngle.getRotation());
+  if (g_auto_on){
+    motor.position(rudderAngle.getRotation());
+  }
 }
 
 void addCheckSum(char* buf){
