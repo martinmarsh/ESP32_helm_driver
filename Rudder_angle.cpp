@@ -5,18 +5,11 @@
 RudderAngle::RudderAngle() {
   this->angle_ = 0;
   this->rotations_ = 0;
+  this->rotation_angle_ = 0;
   this->AS5600Setup_ = false;
-  this->turns_modulus_ = 4096;
-  this->scale_turns_ = 0.087890625;
+  //this->turns_modulus_ = 4096;
+  //this->scale_turns_ = 0.087890625;
   this->offset_= 0;
-}
-
-bool RudderAngle::hasRudderAngleChanged(){
-  bool ret = false;
-  if (this->angle_ != this->last_angle_ || this->rotations_ != this->last_rotations_) ret = true;
-  this->last_angle_  = this->angle_;
-  this->last_rotations_ = this->rotations_ ;
-  return ret;  
 }
 
 
@@ -38,11 +31,11 @@ void RudderAngle::setBase(int turns, float offset_degrees) {
   // sets the zero point in degrees.
   // Can be changes any time before getRoation
   if (turns > 0) {
-    this->turns_modulus_ = 4096 * turns;
-    this->scale_turns_ = 0.087890625 / turns;
+    this->rotations_ = 0;
+    this->rotation_angle_ = 0;
     this->offset_= 0;   //zero offset for getRotation to find true rotation
-
-    this->offset_ = this->getRotation() - offset_degrees;
+    this->readRaw_();
+    this->offset_ = this->angle_ - offset_degrees;
     Serial.printf("RudderAngle base = %i, offset: %.2f\n",turns, this->offset_);
   }
 }
@@ -58,9 +51,11 @@ float RudderAngle::withinCircle(float x){
   return x;
 }
 
-float RudderAngle::getRotation() {
+int RudderAngle::getRotation() {
   // turns is number of rotations for 360
-  return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) - this->offset_);
+  // return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) - this->offset_);
+  // unscaled value
+  return this->rotation_angle_ - this->offset_;
 }
 
 // AS5600 Rotation sensor  Code
@@ -131,14 +126,18 @@ void RudderAngle::readRaw_() {
 #endif
 }
 
+
 void RudderAngle::computeRotations_() {
   
   // Counts the number of rotations clockwise positive
   if (this->angle_ < 1028 && this->last_angle_read_ > 3084) {
-    ++this->rotations_;
+    this->rotations_+= 4096;
   } else if (this->angle_  > 3084 &&  this->last_angle_read_ < 1028) {
-    --this->rotations_;
+    this->rotations_ -= 4096;
   }
   this->last_angle_read_  = this->angle_ ;
+  this->rotation_angle_ = this->angle_ + this->rotations_;
+  Serial.printf("compute rotation:  angle %i rotation angle %i  rotations %i \n", this->angle_, this->rotation_angle_, this->rotations_);   
+
 }
 

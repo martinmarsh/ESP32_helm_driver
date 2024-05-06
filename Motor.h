@@ -6,32 +6,32 @@
 class Motor {
     public:
 
-    Motor(int in1, int in2, int pwm, int pwm_feq, int pwm_channel, int pwm_resolution, int max_duty, int min_duty);
+    Motor(int in1, int in2, uint8_t pwm, int pwm_feq, uint8_t pwm_channel, uint8_t pwm_resolution, int max_duty, int min_duty);
     void setup();
     void standby();
     void forward(int power);
     void reverse(int power);
     void power(int power);
     void break_stop();
-    void moveto(float position);
-    void position(float position);
+    void moveto(int position);
+    void position(int position);
 
     
     private:
     void run();
-    int dutyCycle;
+    uint32_t dutyCycle;
     int max_duty;
     int min_duty;
     bool pwm_active;
     int in1;
     int in2;
-    int pwm;
+    uint8_t pwm;
     int pwm_freq;
-    int pwm_channel;
-    int pwm_resolution;
+    uint8_t pwm_channel;
+    uint8_t pwm_resolution;
     int max_pwm;
-    float desired_position;
-    float last_position;
+    int desired_position;
+    int last_position;
 };
 
 
