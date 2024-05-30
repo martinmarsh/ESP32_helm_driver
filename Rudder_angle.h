@@ -12,8 +12,7 @@ class RudderAngle  {
     void read();
     void checkAS5600Setup();
     int getRotation();
-    void  setBase(int turns, float offset_degrees);
-    float withinCircle(float x);
+    void setBase();
     
   private:
     bool button_pushed_;
@@ -24,11 +23,9 @@ class RudderAngle  {
     int last_rotations_;
     bool AS5600Setup_; 
     int magnet_status_;
-    //int turns_modulus_;
-    //float scale_turns_;
-    int offset_ ;               //degress
+    int offset_ ;               // base rotation angle
 
-    int last_angle_read_;         // used rotation detector only
+    int last_angle_read_;         // used by rotation detector only
 
     void checkMagnetPresence_();
     void readRaw_();

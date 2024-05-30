@@ -30,7 +30,7 @@
 #define PWM_RESOLUTION 8  // power is expressed 0 to 100 - resolution shoulb be > 7 bits 
 
 // Set number of turns of position sensor lock to lock;  1 for direct drive on rudder stock
-#define HELM_GEAR_RATIO 13
+#define HELM_GEAR_RATIO 12
 
 
 
@@ -47,6 +47,8 @@ float p_integral = 0;
 
 bool g_start = true;
 bool g_auto_on = false;
+
+int max_motor = HELM_GEAR_RATIO/2 * 4096 - 1000;
 
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
@@ -75,11 +77,12 @@ int loop_phase = 0;      //Ensures only one routine runs per loop
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-  motor.setup();
 
   Serial.begin(115200);
   Serial.println("Starting");
 
+  motor.setup();
+  
   digitalWrite(LED_BUILTIN, HIGH);
 
   delay(1000);  // Pause for 1 seconds
@@ -181,7 +184,7 @@ bool process_message_1( char* s, int field, mdata& md){
           if (g_last_heading >= 0) {
             md.change = relative180(md.heading - g_last_heading);
           }
-          p_integral += md.error *  g_pi/3000.0;
+          p_integral += md.error *  g_pi/30000.0;
           if (p_integral > 10){
             p_integral = 10;
           } else if (p_integral < -10){
@@ -189,12 +192,12 @@ bool process_message_1( char* s, int field, mdata& md){
           }
           g_last_heading = md.heading;
           //helm_pos = (md.error + md.change * g_pd/100 + p_integral) * g_gain/50.0;
-          md.helm_pos = md.error * g_gain * 10;
-          //if (md.helm_pos > 30){
-          //  md.helm_pos = 30;
-          //} else if (md.helm_pos < -30){
-          //  md.helm_pos = -30;
-          //}
+          md.helm_pos = (md.error + p_integral) * g_gain * 10;
+          if (md.helm_pos > max_motor){
+             md.helm_pos = max_motor;
+          } else if (md.helm_pos < -max_motor){
+            md.helm_pos = -max_motor;
+          }
 
           Serial.printf("active helm head %.1f, desired: %.1f helm_pos %.2f error %.2f integral %.3f change %.1f\n", md.heading, md.desired_heading, md.helm_pos, md.error, p_integral, md.change);
           Serial.printf("GAIN %.1f - %.1f, PI:  %.1f - %.1f, PD: %.1f - %.1f\n", md.gain, g_gain, md.pi, g_pi, md.pd, g_pd);
@@ -208,7 +211,7 @@ bool process_message_1( char* s, int field, mdata& md){
           g_auto_on = false;
           //Serial.printf("got inactive compass = %.2f, desired: %.2f\n", md.heading,  md.desired_heading);
           motor.break_stop();
-          rudderAngle.setBase(HELM_GEAR_RATIO, 0);
+          rudderAngle.setBase();
         }
 
       } else {
@@ -232,7 +235,7 @@ bool process_message_2( char* s, int field, mdata& md){
       break;
     case 2:
       if (md.set_base){
-        rudderAngle.setBase(HELM_GEAR_RATIO, 0);
+        rudderAngle.setBase();
       }
       md.helm_pos = atof(s);
       motor.moveto(md.helm_pos);

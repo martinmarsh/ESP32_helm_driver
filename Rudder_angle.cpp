@@ -26,36 +26,20 @@ void RudderAngle::checkAS5600Setup() {
   }
 }
 
-void RudderAngle::setBase(int turns, float offset_degrees) {
-  // sets number of full turns/rotations for 360
+void RudderAngle::setBase() {
   // sets the zero point in degrees.
   // Can be changes any time before getRoation
-  if (turns > 0) {
-    this->rotations_ = 0;
-    this->rotation_angle_ = 0;
-    this->offset_= 0;   //zero offset for getRotation to find true rotation
-    this->readRaw_();
-    this->offset_ = this->angle_ - offset_degrees;
-    Serial.printf("RudderAngle base = %i, offset: %.2f\n",turns, this->offset_);
-  }
+  this->rotations_ = 0;
+  this->rotation_angle_ = 0;
+  this->offset_= 0;   //zero offset for getRotation to find true rotation
+  this->readRaw_();
+  this->offset_ = this->angle_;
+  Serial.printf("RudderAngle offset: %i\n", this->offset_);
 }
 
-float RudderAngle::withinCircle(float x){
-  // Not so eligant as:
-  // x= i%360 ;
-  // x += x<0?360:0;
-  // which should work for modern C++ implementations
-  // but does not rely on undefined behaviour of negatives in mod
-  while (x > 360.0) x -= 360.0;
-  while (x < 0) x += 360.0;
-  return x;
-}
 
 int RudderAngle::getRotation() {
-  // turns is number of rotations for 360
-  // return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) - this->offset_);
-  // unscaled value
-  return this->rotation_angle_ - this->offset_;
+    return this->rotation_angle_ - this->offset_;
 }
 
 // AS5600 Rotation sensor  Code
@@ -130,9 +114,9 @@ void RudderAngle::readRaw_() {
 void RudderAngle::computeRotations_() {
   
   // Counts the number of rotations clockwise positive
-  if (this->angle_ < 1028 && this->last_angle_read_ > 3084) {
+  if (this->angle_ < 1024 && this->last_angle_read_ > 3072) {
     this->rotations_+= 4096;
-  } else if (this->angle_  > 3084 &&  this->last_angle_read_ < 1028) {
+  } else if (this->angle_  > 3072 &&  this->last_angle_read_ < 1024) {
     this->rotations_ -= 4096;
   }
   this->last_angle_read_  = this->angle_ ;

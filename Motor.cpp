@@ -22,21 +22,20 @@ void Motor::setup(){
   // sets motor pins as outputs:
   pinMode(this->in1, OUTPUT);
   pinMode(this->in2, OUTPUT);
-  //pinMode(this->pwm, OUTPUT);
 
   // set motor to off state
   this->standby();
 
   // set up PWM
-  ledcAttachPin(14,1);
-  ledcSetup(1, 5000, 8);
+  ledcAttachPin(this->pwm, this->pwm_channel);
+  ledcSetup(this->pwm_channel, this->pwm_freq, this->pwm_resolution);
+  ledcWrite(this->pwm_channel, this->max_pwm); 
   
 }
 
 void Motor::standby(){
   digitalWrite(this->in1, HIGH);
   digitalWrite(this->in2, HIGH);
-  this->power(0);
 }
 
 void Motor::forward(int power){
@@ -55,48 +54,23 @@ void Motor::reverse(int power){
 void Motor::break_stop(){
   digitalWrite(this->in1, LOW);
   digitalWrite(this->in2, LOW);
-  this->power(0);
+  ledcWrite(this->pwm_channel, this->max_pwm); 
 }
 
 void Motor::power(int duty){
-  //duty is 
-  if (duty < this->min_duty){
-    ledcWrite(1, 255); 
-    Serial.printf("duty = %i, less than setting motor duty cycle = %i\n", duty, 255);
+  //duty is a percentage 100 = fully on, channel is 0 for full on and off is a number based on resolution 
+  if (duty < this->min_duty){ 
+    this->break_stop();
+    Serial.printf("duty = %i, less than setting min duty cycle = %i,  applied duty: %i, motor off\n", duty,  this->min_duty, this->max_pwm);
   } else if (duty > this->max_duty) {
-    Serial.printf("duty = %i, greater than setting motor duty cycle = %i\n", duty, 0);
-    ledcWrite(1, 0); 
+    Serial.printf("duty = %i, greater than setting max duty cycle = %i, applied duty: 0, motor fully on\n", duty, this->max_duty);
+    ledcWrite(this->pwm_channel, 0); 
   } else {
     this->dutyCycle = ((100-duty)*this->max_pwm)/100;
-    Serial.printf("duty = %i duty cycle = %i  max = %i\n", duty, this->dutyCycle, this->max_pwm);
-    ledcWrite(1, this->dutyCycle); 
+    Serial.printf("duty = %i duty cycle = %i  min power = %i  max = 0\n", duty, this->dutyCycle, this->max_pwm);
+    ledcWrite(this->pwm_channel, this->dutyCycle); 
 
   }
-
-  /*
-  if (duty >= this->min_duty && duty <= this->max_duty) {
-    if (!this->pwm_active) { 
-        ledcAttachPin(this->pwm, this->pwm_channel);
-        this->pwm_active = true;
-    }
-    this->dutyCycle = (duty*this->max_pwm)/100;
-    ledcWrite(this->pwm_channel, this->dutyCycle);  
-    Serial.printf("motor duty = %i  max = %i\n", this->dutyCycle, this->max_pwm);
-  } else{
-    if (this->pwm_active) { 
-        ledcDetachPin(this->pwm);
-        this->pwm_active = false;
-    }
-    if (duty <= this->min_duty) {
-        digitalWrite(this->pwm, HIGH);
-    }
-    if (duty >= this->max_duty){
-        digitalWrite(this->pwm, LOW);
-    }
-
-  }
-  */
-
 }
 
 
@@ -114,26 +88,16 @@ void Motor::position(int position){
 }
 
 void Motor::run(){
-  float distance = float(this->desired_position - this->last_position);
+  float distance = float(this->last_position - this->desired_position);
  
   float abs_distance = abs(distance);
-  int power = int (abs_distance / 20);
+  int power = int (abs_distance / 40);
   Serial.printf("motor abs distance = %.2f, distance =  %.2f, desired = %i, last motor = %i power = %i\n",  abs_distance, distance, this->desired_position, this->last_position, power);
   
-  if (abs_distance <= 500.0){
-     power = 0;
-  } 
-  if (distance < 0){
+  if (distance > 0){
     this->forward(power);
   } else {
     this->reverse(power);
   }
-
-
+  
 }
-
-
-
-
-
- 
