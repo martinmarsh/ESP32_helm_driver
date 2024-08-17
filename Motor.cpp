@@ -42,7 +42,6 @@ void Motor::forward(int power){
   digitalWrite(this->in1, HIGH);
   digitalWrite(this->in2, LOW);
   this->power(power);
-
 }
 
 void Motor::reverse(int power){
@@ -61,13 +60,13 @@ void Motor::power(int duty){
   //duty is a percentage 100 = fully on, channel is 0 for full on and off is a number based on resolution 
   if (duty < this->min_duty){ 
     this->break_stop();
-    Serial.printf("duty = %i, less than setting min duty cycle = %i,  applied duty: %i, motor off\n", duty,  this->min_duty, this->max_pwm);
+    //Serial.printf("duty = %i, less than setting min duty cycle = %i,  applied duty: %i, motor off\n", duty,  this->min_duty, this->max_pwm);
   } else if (duty > this->max_duty) {
-    Serial.printf("duty = %i, greater than setting max duty cycle = %i, applied duty: 0, motor fully on\n", duty, this->max_duty);
+    //Serial.printf("duty = %i, greater than setting max duty cycle = %i, applied duty: 0, motor fully on\n", duty, this->max_duty);
     ledcWrite(this->pwm_channel, 0); 
   } else {
     this->dutyCycle = ((100-duty)*this->max_pwm)/100;
-    Serial.printf("duty = %i duty cycle = %i  min power = %i  max = 0\n", duty, this->dutyCycle, this->max_pwm);
+    //Serial.printf("duty = %i duty cycle = %i  min power = %i  max = 0\n", duty, this->dutyCycle, this->max_pwm);
     ledcWrite(this->pwm_channel, this->dutyCycle); 
 
   }
@@ -76,13 +75,23 @@ void Motor::power(int duty){
 
 void Motor::moveto(int position){
   // this is based on multi turn angle
+  
+  if (position > MAX_MOTOR){
+      position = MAX_MOTOR;
+  } else if (position < -MAX_MOTOR){
+      position = -MAX_MOTOR;
+  }
   this->desired_position = position;
-  this->run();
-
 }
 
 void Motor::position(int position){
-  //  this is based on multi turn angle
+  // must be called at regular intervals to start motor and stop at desired position
+  // position is multi turn angle with offset applied
+  if (position > MAX_MOTOR){
+      position = MAX_MOTOR;
+    } else if (position < -MAX_MOTOR){
+      position = -MAX_MOTOR;
+  }
   this->last_position = position;
   this->run();
 }

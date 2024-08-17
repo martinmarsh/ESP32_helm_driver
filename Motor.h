@@ -2,6 +2,7 @@
 #define Motor_h
 #include <Arduino.h>
 
+#define MAX_MOTOR 18000
 
 class Motor {
     public:

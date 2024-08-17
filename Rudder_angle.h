@@ -12,7 +12,7 @@ class RudderAngle  {
     void read();
     void checkAS5600Setup();
     int getRotation();
-    void setBase();
+    void setBase(bool full);
     
   private:
     bool button_pushed_;

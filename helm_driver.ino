@@ -29,11 +29,6 @@
 #define PWM_CHANNEL 1
 #define PWM_RESOLUTION 8  // power is expressed 0 to 100 - resolution shoulb be > 7 bits 
 
-// Set number of turns of position sensor lock to lock;  1 for direct drive on rudder stock
-#define HELM_GEAR_RATIO 12
-
-
-
 #define LOOP_DELAY 33      //Each loop is 3*loop_delay ms= fast_update period
   
 RudderAngle rudderAngle;
@@ -42,14 +37,12 @@ RudderAngle rudderAngle;
 float g_gain = 100;
 float g_pi = 100;
 float g_pd = 100;
-float g_last_heading = -1;
+float g_last_error = 0;
 float p_integral = 0;
 
 bool g_start = true;
 bool g_auto_on = false;
-
-int max_motor = HELM_GEAR_RATIO/2 * 4096 - 1000;
-
+bool g_steer_on = false;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
 Motor motor(MOTOR_IN1, MOTOR_IN2, MOTOR_PWM, PWM_FREQ, PWM_CHANNEL, PWM_RESOLUTION, 80, 20);
@@ -110,7 +103,7 @@ void loop() {
   digitalWrite(LED_BUILTIN, LOW);
 
   start_time = millis();
-   switch(loop_phase){
+  switch(loop_phase){
     case 0:
         update_1();
       break;
@@ -133,6 +126,7 @@ void loop() {
 
 bool process_message_1( char* s, int field, mdata& md){
   bool ok = true;
+  
   switch (field){
     case 1:
       if (s[0] == '1'){
@@ -165,10 +159,10 @@ bool process_message_1( char* s, int field, mdata& md){
       break;
     case 10:
       //Serial.print(s);
-      md.gain = atof("100");
+      md.gain = atof(s);
       break;
     case 11:
-      md.pi = atof("100");
+      md.pi = atof(s);
       break;
     case 12:
       md.pd = atof(s);
@@ -178,40 +172,42 @@ bool process_message_1( char* s, int field, mdata& md){
           g_auto_on = true;
           g_gain = md.gain;
           g_pi = md.pi;
-          g_pd = md.pd;
-          md.change = 0;
-          md.error = relative180(md.heading - md.desired_heading);
-          if (g_last_heading >= 0) {
-            md.change = relative180(md.heading - g_last_heading);
-          }
-          p_integral += md.error *  g_pi/30000.0;
-          if (p_integral > 10){
-            p_integral = 10;
-          } else if (p_integral < -10){
-            p_integral = -10;
-          }
-          g_last_heading = md.heading;
-          //helm_pos = (md.error + md.change * g_pd/100 + p_integral) * g_gain/50.0;
-          md.helm_pos = (md.error + p_integral) * g_gain * 10;
-          if (md.helm_pos > max_motor){
-             md.helm_pos = max_motor;
-          } else if (md.helm_pos < -max_motor){
-            md.helm_pos = -max_motor;
+          g_pd = md.pd/120;
+
+          if(g_pd > 1){
+            g_pd = 1;
           }
 
-          Serial.printf("active helm head %.1f, desired: %.1f helm_pos %.2f error %.2f integral %.3f change %.1f\n", md.heading, md.desired_heading, md.helm_pos, md.error, p_integral, md.change);
-          Serial.printf("GAIN %.1f - %.1f, PI:  %.1f - %.1f, PD: %.1f - %.1f\n", md.gain, g_gain, md.pi, g_pi, md.pd, g_pd);
+          md.error = relative180(md.heading - md.desired_heading);
+          
+          md.change = (md.error - g_last_error);
+          g_last_error += md.change/20;
+          
+          p_integral += md.error *  g_pi/30000.0;
+          if (p_integral > 15){
+            p_integral = 15;
+          } else if (p_integral < -15){
+            p_integral = -15;
+          }
+          //helm_pos = (md.error + md.change * g_pd/100 + p_integral) * g_gain/50.0;
+          md.helm_pos = (md.error + p_integral - md.change*g_pd) * g_gain * 3;
+
+          //Serial.printf("active helm head %.1f, desired: %.1f helm_pos %.2f error %.2f integral %.3f change %.1f\n", md.heading, md.desired_heading, md.helm_pos, md.error, p_integral, md.change);
+          //Serial.printf("GAIN %.1f - %.1f, PI:  %.1f - %.1f, PD: %.1f - %.1f\n", md.gain, g_gain, md.pi, g_pi, md.pd, g_pd);
  
           motor.moveto(int(md.helm_pos));
         } else {
 
           // not active
-          g_last_heading = -1;
+          g_last_error = 0;
           p_integral = 0;
           g_auto_on = false;
+          g_steer_on = false;   //message 1 is sent in all states except steer mode then message 2 is sent instead
+                                //set here to ensure motor is off when steer mode is false
+                                //assumes at least one message 1 with auto off which is default condition
           //Serial.printf("got inactive compass = %.2f, desired: %.2f\n", md.heading,  md.desired_heading);
           motor.break_stop();
-          rudderAngle.setBase();
+          rudderAngle.setBase(true);
         }
 
       } else {
@@ -231,15 +227,21 @@ bool process_message_2( char* s, int field, mdata& md){
      case 1:
       if (s[0] == '1'){
         md.set_base = true;
-      } 
+      } else {
+        md.set_base = false;
+      }
       break;
     case 2:
-      if (md.set_base){
-        rudderAngle.setBase();
-      }
-      md.helm_pos = atof(s);
-      motor.moveto(md.helm_pos);
-      Serial.printf("helm_pos %.2f set_base %d\n",md.helm_pos, md.set_base);   
+      if (md.check_ok){
+        if (md.set_base){
+          Serial.printf("STEER MODE: base set  md.set_base = %d\n", md.set_base); 
+          rudderAngle.setBase(false);
+        }
+        md.helm_pos = atof(s);
+        motor.moveto(md.helm_pos);
+        Serial.printf("STEER MODE: helm_pos %.2f\n",md.helm_pos); 
+        g_steer_on = true;
+      }  
       break;
   }
   return ok;
@@ -327,9 +329,9 @@ void slow_update() {
 
 
 void update_1() {
-  Serial.print("update 1\n"); 
-  rudderAngle.read();
-  if (g_auto_on){
+  Serial.print("update 1: "); 
+  rudderAngle.read(); 
+  if (g_auto_on == true || g_steer_on == true){
     motor.position(rudderAngle.getRotation());
   }
 }

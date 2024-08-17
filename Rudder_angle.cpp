@@ -6,6 +6,7 @@ RudderAngle::RudderAngle() {
   this->angle_ = 0;
   this->rotations_ = 0;
   this->rotation_angle_ = 0;
+  this->last_angle_read_ = 0;
   this->AS5600Setup_ = false;
   //this->turns_modulus_ = 4096;
   //this->scale_turns_ = 0.087890625;
@@ -26,20 +27,25 @@ void RudderAngle::checkAS5600Setup() {
   }
 }
 
-void RudderAngle::setBase() {
+void RudderAngle::setBase(bool full) {
   // sets the zero point in degrees.
-  // Can be changes any time before getRoation
-  this->rotations_ = 0;
-  this->rotation_angle_ = 0;
-  this->offset_= 0;   //zero offset for getRotation to find true rotation
-  this->readRaw_();
-  this->offset_ = this->angle_;
+  // Can be change any time before getRoation
+  if(full == true){
+    if (this->rotations_ > 0){
+      this->rotations_  = 0;
+    }else if ( this->rotations_ < -4096){
+      this->rotations_  = -4096;
+    }
+  }
+  this->read();   // gets absolute rotation_angle_ for multiple turns
+  this->offset_ = this->rotation_angle_;   // this is the offset which must be applied when getting relative rotation to baseline
   Serial.printf("RudderAngle offset: %i\n", this->offset_);
 }
 
 
 int RudderAngle::getRotation() {
-    return this->rotation_angle_ - this->offset_;
+  // rotation_angle is based on absolute position ignoring offset when base was set
+  return this->rotation_angle_ - this->offset_;
 }
 
 // AS5600 Rotation sensor  Code
@@ -119,9 +125,8 @@ void RudderAngle::computeRotations_() {
   } else if (this->angle_  > 3072 &&  this->last_angle_read_ < 1024) {
     this->rotations_ -= 4096;
   }
-  this->last_angle_read_  = this->angle_ ;
   this->rotation_angle_ = this->angle_ + this->rotations_;
-  Serial.printf("compute rotation:  angle %i rotation angle %i  rotations %i \n", this->angle_, this->rotation_angle_, this->rotations_);   
-
+  Serial.printf("compute rotation:  angle %i rotation angle %i  rotations %i last read %i\n", this->angle_, this->rotation_angle_, this->rotations_, this->last_angle_read_);   
+  this->last_angle_read_  = this->angle_ ;
 }
 
