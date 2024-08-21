@@ -30,6 +30,9 @@
 #define PWM_RESOLUTION 8  // power is expressed 0 to 100 - resolution shoulb be > 7 bits 
 
 #define LOOP_DELAY 33      //Each loop is 3*loop_delay ms= fast_update period
+
+#define FULL_RESET true
+#define SET_OFFSET false
   
 RudderAngle rudderAngle;
 
@@ -43,6 +46,9 @@ float p_integral = 0;
 bool g_start = true;
 bool g_auto_on = false;
 bool g_steer_on = false;
+bool return_to_base = true;
+bool returning_to_base = false;
+bool returned_to_base = false;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
 Motor motor(MOTOR_IN1, MOTOR_IN2, MOTOR_PWM, PWM_FREQ, PWM_CHANNEL, PWM_RESOLUTION, 80, 20);
@@ -87,6 +93,8 @@ void setup() {
 
   digitalWrite(LED_BUILTIN, HIGH);
   delay(2000);
+  rudderAngle.checkAS5600Setup(); 
+  rudderAngle.read();
 }
 
 void loop() {
@@ -103,6 +111,7 @@ void loop() {
   digitalWrite(LED_BUILTIN, LOW);
 
   start_time = millis();
+  fast_update();
   switch(loop_phase){
     case 0:
         update_1();
@@ -114,7 +123,9 @@ void loop() {
       if (++slow_update_counter > 16){
           slow_update();
           slow_update_counter = 0;
-        }
+          rudderAngle.printRotation();
+          motor.printStatus();
+      }
       break;
     default:
       Serial.printf("Phase Error in loop: %i\n", loop_phase);
@@ -206,8 +217,9 @@ bool process_message_1( char* s, int field, mdata& md){
                                 //set here to ensure motor is off when steer mode is false
                                 //assumes at least one message 1 with auto off which is default condition
           //Serial.printf("got inactive compass = %.2f, desired: %.2f\n", md.heading,  md.desired_heading);
-          motor.break_stop();
-          rudderAngle.setBase(true);
+          if(returned_to_base == false){
+            return_to_base = true;
+          }
         }
 
       } else {
@@ -234,12 +246,12 @@ bool process_message_2( char* s, int field, mdata& md){
     case 2:
       if (md.check_ok){
         if (md.set_base){
-          Serial.printf("STEER MODE: base set  md.set_base = %d\n", md.set_base); 
-          rudderAngle.setBase(false);
+          //Serial.printf("STEER MODE: base set  md.set_base = %d\n", md.set_base); 
+          rudderAngle.setBase(SET_OFFSET);
         }
         md.helm_pos = atof(s);
         motor.moveto(md.helm_pos);
-        Serial.printf("STEER MODE: helm_pos %.2f\n",md.helm_pos); 
+        //Serial.printf("STEER MODE: helm_pos %.2f\n",md.helm_pos);
         g_steer_on = true;
       }  
       break;
@@ -269,7 +281,7 @@ void update_2() {
     message_no = 0;
     // $PXXS1,auto,hdm,'M',set_hdm,'M',compass_status,pitch,roll,compass_temp,auto_gain,auto_pi,auto_pd*checksum
     // $PXXS2, set_base(1 or 0), helm_pos
-    Serial.printf("Processing message = %s\n", mess);
+    //Serial.printf("Processing message = %s\n", mess);
 
     if (mess[0] != '$'){
       ok = false;
@@ -328,11 +340,35 @@ void slow_update() {
 }
 
 
-void update_1() {
-  Serial.print("update 1: "); 
+void fast_update() {
   rudderAngle.read(); 
   if (g_auto_on == true || g_steer_on == true){
     motor.position(rudderAngle.getRotation());
+    returned_to_base = false;
+  }
+}
+
+void update_1() {
+  int position;
+  if (return_to_base == true){
+    rudderAngle.setBase(FULL_RESET);
+    returning_to_base = true;
+    motor.moveto(0);
+    return_to_base = false;
+  }
+  if (returning_to_base == true){
+    position = rudderAngle.getRotation();
+    if (motor.targetReached() == true){
+      returning_to_base = false;
+      returned_to_base = true;           //must be set to false when motor activated in fast update 
+      Serial.printf("Returned to base: position %i\n", position); 
+    } else {
+      motor.position(position);
+    }  
+  }
+  if (returned_to_base == true){
+    // Ensure any external or manual movement is compensated by offset once motor has retuned to near zero and stopped
+    rudderAngle.setBase(SET_OFFSET);
   }
 }
 

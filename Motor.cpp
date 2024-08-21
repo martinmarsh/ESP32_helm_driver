@@ -15,6 +15,9 @@ Motor::Motor(int in1, int in2, uint8_t pwm, int pwm_feq, uint8_t pwm_channel,uin
     this->max_duty = max_duty;
     this->min_duty = min_duty;
     this->max_pwm = int(pow(2, pwm_resolution))-1;
+    this->power_off = true;
+    this->power = 0;
+    this->distance = 0;
 }
 
 void Motor::setup(){
@@ -38,16 +41,16 @@ void Motor::standby(){
   digitalWrite(this->in2, HIGH);
 }
 
-void Motor::forward(int power){
+void Motor::forward(){
   digitalWrite(this->in1, HIGH);
   digitalWrite(this->in2, LOW);
-  this->power(power);
+  this->action();
 }
 
-void Motor::reverse(int power){
+void Motor::reverse(){
   digitalWrite(this->in1, LOW);
   digitalWrite(this->in2, HIGH);
-  this->power(power);
+  this->action();
 }
 
 void Motor::break_stop(){
@@ -56,22 +59,28 @@ void Motor::break_stop(){
   ledcWrite(this->pwm_channel, this->max_pwm); 
 }
 
-void Motor::power(int duty){
+void Motor::action(){
   //duty is a percentage 100 = fully on, channel is 0 for full on and off is a number based on resolution 
-  if (duty < this->min_duty){ 
+  if (this->power < this->min_duty){ 
     this->break_stop();
+    this->power_off = true;
     //Serial.printf("duty = %i, less than setting min duty cycle = %i,  applied duty: %i, motor off\n", duty,  this->min_duty, this->max_pwm);
-  } else if (duty > this->max_duty) {
+  } else if (this->power > this->max_duty) {
     //Serial.printf("duty = %i, greater than setting max duty cycle = %i, applied duty: 0, motor fully on\n", duty, this->max_duty);
     ledcWrite(this->pwm_channel, 0); 
+    this->power_off = false;
   } else {
-    this->dutyCycle = ((100-duty)*this->max_pwm)/100;
+    this->dutyCycle = ((100-this->power)*this->max_pwm)/100;
     //Serial.printf("duty = %i duty cycle = %i  min power = %i  max = 0\n", duty, this->dutyCycle, this->max_pwm);
-    ledcWrite(this->pwm_channel, this->dutyCycle); 
-
+    ledcWrite(this->pwm_channel, this->dutyCycle);
+    this->power_off = false; 
   }
 }
 
+
+bool Motor::targetReached() {
+  return this->power_off;
+}
 
 void Motor::moveto(int position){
   // this is based on multi turn angle
@@ -97,16 +106,21 @@ void Motor::position(int position){
 }
 
 void Motor::run(){
-  float distance = float(this->last_position - this->desired_position);
- 
-  float abs_distance = abs(distance);
-  int power = int (abs_distance / 40);
-  Serial.printf("motor abs distance = %.2f, distance =  %.2f, desired = %i, last motor = %i power = %i\n",  abs_distance, distance, this->desired_position, this->last_position, power);
-  
-  if (distance > 0){
-    this->forward(power);
+  float abs_distance;
+  this->distance = float(this->last_position - this->desired_position);
+  abs_distance = abs(this->distance);
+  this->power = int (abs_distance / 40);
+  if (this->distance > 0){
+    this->forward();
   } else {
-    this->reverse(power);
+    this->reverse();
   }
   
+}
+
+
+void Motor::printStatus(){
+   Serial.printf("Motor: distance = %.2f, desired = %i, position = %i, duty = %i, power = %i off = %d\n",
+    this->distance, this->desired_position, this->last_position, this->dutyCycle, this->power, this->power_off);
+ 
 }

@@ -11,8 +11,10 @@ class RudderAngle  {
     RudderAngle();
     void read();
     void checkAS5600Setup();
+    int getMagnetStatus();
     int getRotation();
     void setBase(bool full);
+    void printRotation();
     
   private:
     bool button_pushed_;

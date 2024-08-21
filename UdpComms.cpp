@@ -32,7 +32,7 @@ bool UdpComms::messageAvailable(){
   if (g_recLocked){
       this->receivedMessage = (char *) g_recBuf;
       this->messageReady_ = true;
-      Serial.printf("Set message available:  %u byte buffer: %s message: %s\n", g_recLen, g_recBuf, this->receivedMessage);
+      //Serial.printf("Set message available:  %u byte buffer: %s message: %s\n", g_recLen, g_recBuf, this->receivedMessage);
   } else {
     //Serial.printf("message unavailable is %u\n",g_recLocked);
     this->messageReady_ = false;
@@ -135,8 +135,8 @@ void UdpComms::stateMachine(){
           size_t g_recLen = packet.read(g_recBuf, 90);
           if (g_recLen > 0 && g_recLen <= 91) {
               g_recBuf[g_recLen] = 0;
-              Serial.printf("Got message in call back:  %u byte %s\n", g_recLen, g_recBuf);
-              packet.printf("Got %u bytes\n", g_recLen);
+              //Serial.printf("Got message in call back:  %u byte %s\n", g_recLen, g_recBuf);
+              //packet.printf("Got %u bytes\n", g_recLen);
           } else{
             // discard packet
             g_recLocked = false;
